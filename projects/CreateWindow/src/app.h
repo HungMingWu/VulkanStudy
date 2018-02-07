@@ -31,6 +31,7 @@ private:
 	void initWindow();
 	void initVulkan();
 	void mainLoop();
+	void drawFrame();
 	void destroy();
 
 	void createVkInstance();
@@ -52,6 +53,9 @@ private:
 	void createRenderPass();
 	void createGraphicsPipeline();
 	void createFramebuffers();
+	void createCommandPool();
+	void createCommandBuffers();
+	void createSemaphores();
 
 private:
 	GLFWwindow* window = nullptr;
@@ -71,6 +75,11 @@ private:
 	VkRenderPass renderPass;
 	VkPipeline graphicsPipeline;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
+
+	VkCommandPool commandPool;
+	std::vector<VkCommandBuffer> commandBuffers;
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
 
 #ifdef _DEBUG
 	const bool enableValidationLayers = true;
