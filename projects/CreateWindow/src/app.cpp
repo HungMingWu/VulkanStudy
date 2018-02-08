@@ -104,6 +104,16 @@ void Application::initWindow() {
 		assert(0);
 	}
 	LOG("- a GLFW window has been initialized");
+
+	glfwSetWindowUserPointer(window, this);
+	glfwSetWindowSizeCallback(window, Application::onWindowResized);
+}
+
+void Application::onWindowResized(GLFWwindow* window, int width, int height) {
+	static_cast<void>(width);
+	static_cast<void>(height);
+	Application* app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+	app->recreateSwapChain();
 }
 
 void Application::initVulkan() {
@@ -140,19 +150,10 @@ void Application::mainLoop() {
 
 void Application::destroy() {
 	FUNCNAME();
+	cleanupSwapChain();
 	vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
 	vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
 	vkDestroyCommandPool(device, commandPool, nullptr);
-	for (auto framebuffer : swapChainFramebuffers) {
-		vkDestroyFramebuffer(device, framebuffer, nullptr);
-	}
-	vkDestroyPipeline(device, graphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-	vkDestroyRenderPass(device, renderPass, nullptr);
-	for (auto imageView : swapChainImageViews) {
-		vkDestroyImageView(device, imageView, nullptr);
-	}
-	vkDestroySwapchainKHR(device, swapChain, nullptr);
 	vkDestroyDevice(device, nullptr);
 	DestroyDebugReportCallbackEXT(instance, callback, nullptr);
 	vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -753,8 +754,14 @@ void Application::drawFrame() {
 	// 2. Execute the command buffer with that image as attachment in the framebuffer
 	// 3. Return the image to the swap chain for presentation
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(),
+	VkResult result = vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(),
 		imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		recreateSwapChain();
+		return;
+	} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		assert(0);
+	}
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
@@ -779,5 +786,41 @@ void Application::drawFrame() {
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = nullptr;
-	vkQueuePresentKHR(presentQueue, &presentInfo);
+	result = vkQueuePresentKHR(presentQueue, &presentInfo);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		recreateSwapChain();
+	} else if (result != VK_SUCCESS) {
+		assert(0);
+	}
+	vkQueueWaitIdle(presentQueue);
+}
+
+void Application::recreateSwapChain() {
+	FUNCNAME()
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
+	if (width == 0 || height == 0) return;
+	vkDeviceWaitIdle(device);
+	cleanupSwapChain();
+	createSwapChain();
+	createImageViews();
+	createRenderPass();
+	createGraphicsPipeline();
+	createFramebuffers();
+	createCommandBuffers();
+}
+
+void Application::cleanupSwapChain() {
+	FUNCNAME()
+	for (auto framebuffer : swapChainFramebuffers) {
+		vkDestroyFramebuffer(device, framebuffer, nullptr);
+	}
+	vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+	vkDestroyPipeline(device, graphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+	vkDestroyRenderPass(device, renderPass, nullptr);
+	for (auto imageView : swapChainImageViews) {
+		vkDestroyImageView(device, imageView, nullptr);
+	}
+	vkDestroySwapchainKHR(device, swapChain, nullptr);
 }

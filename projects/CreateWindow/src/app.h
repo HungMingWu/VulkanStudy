@@ -34,6 +34,8 @@ private:
 	void drawFrame();
 	void destroy();
 
+	static void onWindowResized(GLFWwindow* window, int width, int height);
+
 	void createVkInstance();
 	bool checkValidationLayerSupport();
 	void getRequiredExtensions(std::vector<const char*>& extensions);
@@ -56,6 +58,8 @@ private:
 	void createCommandPool();
 	void createCommandBuffers();
 	void createSemaphores();
+	void cleanupSwapChain();
+	void recreateSwapChain();
 
 private:
 	GLFWwindow* window = nullptr;
