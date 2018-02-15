@@ -56,10 +56,14 @@ private:
 	void createGraphicsPipeline();
 	void createFramebuffers();
 	void createCommandPool();
+	void createVertexBuffer();
 	void createCommandBuffers();
 	void createSemaphores();
 	void cleanupSwapChain();
 	void recreateSwapChain();
+
+private:
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 private:
 	GLFWwindow* window = nullptr;
@@ -84,6 +88,10 @@ private:
 	std::vector<VkCommandBuffer> commandBuffers;
 	VkSemaphore imageAvailableSemaphore;
 	VkSemaphore renderFinishedSemaphore;
+
+	// TODO: move to 3d entity class
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexBufferMemory;
 
 #ifdef _DEBUG
 	const bool enableValidationLayers = true;
