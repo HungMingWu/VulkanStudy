@@ -690,7 +690,7 @@ void Application::createCommandPool() {
 
 void Application::create3DModels() {
 	FUNCNAME()
-	triangle.initialize(physicalDevice, device);
+	triangle.initialize(physicalDevice, device, commandPool, graphicsQueue);
 }
 
 void Application::createCommandBuffers() {

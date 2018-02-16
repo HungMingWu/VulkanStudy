@@ -41,7 +41,7 @@ const std::vector<Vertex> vertices = {
 
 class Triangle {
 public:
-	void initialize(VkPhysicalDevice physDevice, VkDevice device);
+	void initialize(VkPhysicalDevice physDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue);
 	void commitCommands(VkCommandBuffer commandBuffer);
 	void destroy();
 private:
