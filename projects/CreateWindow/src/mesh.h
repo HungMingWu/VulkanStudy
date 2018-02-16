@@ -33,12 +33,6 @@ struct Vertex {
 	}
 };
 
-const std::vector<Vertex> vertices = {
-	{ { 0.0f, -0.5f },{ 1.0f, 0.0f, 0.0f } },
-	{ { 0.5f, 0.5f },{ 0.0f, 1.0f, 0.0f } },
-	{ { -0.5f, 0.5f },{ 0.0f, 0.0f, 1.0f } }
-};
-
 class Triangle {
 public:
 	void initialize(VkPhysicalDevice physDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue);
@@ -48,4 +42,6 @@ private:
 	VkDevice device;
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
 };
