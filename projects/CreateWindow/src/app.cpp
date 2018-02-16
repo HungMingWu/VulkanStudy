@@ -1,6 +1,7 @@
 #include "app.h"
 #include "shader.h"
 #include "mesh.h"
+#include "log.h"
 #include <cassert>
 #include <vector>
 #include <set>
@@ -8,28 +9,6 @@
 #include <algorithm>
 
 #pragma comment(lib, "vulkan-1.lib")
-
-#ifdef _DEBUG
-#include <string>
-static int __tabCount = 0;
-static std::string __tabString = "";
-#define LOG(x) { std::cout << __tabString << x << std::endl; }
-#define FUNCNAME() LogFuncName __logFuncName(__FUNCTION__);
-#define TAB() { __tabCount++; __tabString = std::string(__tabCount, '\t'); }
-#define UNTAB() { __tabCount--; __tabString = std::string(__tabCount, '\t'); }
-struct LogFuncName {
-	LogFuncName(const char* fname) {
-		LOG(fname)
-		TAB()
-	}
-	~LogFuncName() { UNTAB() }
-};
-#else
-#define LOG(x) {}
-#define FUNCNAME() {}
-#define TAB() {}
-#define UNTAB() {}
-#endif
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_LUNARG_standard_validation"
@@ -130,7 +109,7 @@ void Application::initVulkan() {
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
-	createVertexBuffer();
+	create3DModels();
 	createCommandBuffers();
 	createSemaphores();
 }
@@ -153,8 +132,9 @@ void Application::mainLoop() {
 void Application::destroy() {
 	FUNCNAME();
 	cleanupSwapChain();
-	vkDestroyBuffer(device, vertexBuffer, nullptr);
-	vkFreeMemory(device, vertexBufferMemory, nullptr);
+	{
+		triangle.destroy();
+	}
 	vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
 	vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
 	vkDestroyCommandPool(device, commandPool, nullptr);
@@ -708,32 +688,9 @@ void Application::createCommandPool() {
 	}
 }
 
-void Application::createVertexBuffer() {
+void Application::create3DModels() {
 	FUNCNAME()
-	VkBufferCreateInfo bufferInfo{};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = sizeof(vertices[0]) * vertices.size();
-	bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) {
-		assert(0);
-	}
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
-	VkMemoryAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) {
-		assert(0);
-	}
-	vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
-
-	void* data;
-	vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-	memcpy(data, vertices.data(), (size_t)bufferInfo.size);
-	vkUnmapMemory(device, vertexBufferMemory);
+	triangle.initialize(physicalDevice, device);
 }
 
 void Application::createCommandBuffers() {
@@ -764,14 +721,9 @@ void Application::createCommandBuffers() {
 		renderPassInfo.pClearValues = &clearColor;
 		vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-		VkBuffer vertexBuffers[] = { vertexBuffer };
-		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-		vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-
-		//vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-
+		{
+			triangle.commitCommands(commandBuffers[i]);
+		}
 		vkCmdEndRenderPass(commandBuffers[i]);
 		if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
 			assert(0);
@@ -870,6 +822,7 @@ void Application::cleanupSwapChain() {
 	vkDestroySwapchainKHR(device, swapChain, nullptr);
 }
 
+/* moved to mesh.cpp
 uint32_t Application::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 	FUNCNAME()
 	VkPhysicalDeviceMemoryProperties memProperties;
@@ -882,3 +835,4 @@ uint32_t Application::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags 
 	assert(0);
 	return 0xffffffff;
 }
+*/

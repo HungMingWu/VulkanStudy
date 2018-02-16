@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include "mesh.h"
+
 // vkCreateXXX -> vkDestroyXXX
 // vkAllocateXXX -> vkFreeXXX
 
@@ -56,14 +58,14 @@ private:
 	void createGraphicsPipeline();
 	void createFramebuffers();
 	void createCommandPool();
-	void createVertexBuffer();
+	void create3DModels();
 	void createCommandBuffers();
 	void createSemaphores();
 	void cleanupSwapChain();
 	void recreateSwapChain();
 
 private:
-	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+	//uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 private:
 	GLFWwindow* window = nullptr;
@@ -89,9 +91,8 @@ private:
 	VkSemaphore imageAvailableSemaphore;
 	VkSemaphore renderFinishedSemaphore;
 
-	// TODO: move to 3d entity class
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMemory;
+	// 3d models
+	Triangle triangle;
 
 #ifdef _DEBUG
 	const bool enableValidationLayers = true;

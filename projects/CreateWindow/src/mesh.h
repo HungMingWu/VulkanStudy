@@ -38,3 +38,14 @@ const std::vector<Vertex> vertices = {
 	{ { 0.5f, 0.5f },{ 0.0f, 1.0f, 0.0f } },
 	{ { -0.5f, 0.5f },{ 0.0f, 0.0f, 1.0f } }
 };
+
+class Triangle {
+public:
+	void initialize(VkPhysicalDevice physDevice, VkDevice device);
+	void commitCommands(VkCommandBuffer commandBuffer);
+	void destroy();
+private:
+	VkDevice device;
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexBufferMemory;
+};
