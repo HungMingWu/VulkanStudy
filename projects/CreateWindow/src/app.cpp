@@ -106,6 +106,7 @@ void Application::initVulkan() {
 	createSwapChain();
 	createImageViews();
 	createRenderPass();
+	createDescriptorSetLayout();
 	createGraphicsPipeline();
 	createFramebuffers();
 	createCommandPool();
@@ -135,6 +136,7 @@ void Application::destroy() {
 	{
 		triangle.destroy();
 	}
+	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 	vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
 	vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
 	vkDestroyCommandPool(device, commandPool, nullptr);
@@ -159,6 +161,7 @@ void Application::getRequiredExtensions(std::vector<const char*>& extensions) {
 
 void Application::createVkInstance() {
 	FUNCNAME()
+	LOG("- call vkCreateInstance() with VkApplicationInfo, VkInstanceCreateInfo to create a VkInstance")
 	if (enableValidationLayers && !checkValidationLayerSupport()) assert(0);
 
 	VkApplicationInfo appInfo{};
@@ -188,6 +191,7 @@ void Application::createVkInstance() {
 
 bool Application::checkValidationLayerSupport() {
 	FUNCNAME()
+	LOG("- call vkEnumerateInstanceLayerProperties() to get a list of VkLayerProperties")
 	uint32_t layerCount;
 	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 	std::vector<VkLayerProperties> availableLayers(layerCount);
@@ -210,6 +214,7 @@ bool Application::checkValidationLayerSupport() {
 
 void Application::setupDebugCallback() {
 	FUNCNAME()
+	LOG("- call CreateDebugReportCallbackEXT()")
 	if (!enableValidationLayers) return;
 
 	VkDebugReportCallbackCreateInfoEXT createInfo{};
@@ -224,6 +229,7 @@ void Application::setupDebugCallback() {
 
 QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physDevice) {
 	FUNCNAME()
+	LOG("- call vkGetPhysicalDeviceQueueFamilyProperties() to get a list of VkQueueFamilyProperties")
 	QueueFamilyIndices indices;
 	uint32_t queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(physDevice, &queueFamilyCount, nullptr);
@@ -235,6 +241,7 @@ QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physDevice) {
 			indices.graphicsFamily = i;
 		}
 		VkBool32 presentSupport = false;
+		LOG("- call vkGetPhysicalDeviceSurfaceSupportKHR() to check present support")
 		vkGetPhysicalDeviceSurfaceSupportKHR(physDevice, i, surface, &presentSupport);
 		if (queueFamily.queueCount > 0 && presentSupport) {
 			indices.presentFamily = i;
@@ -300,6 +307,7 @@ void Application::pickPhysicalDevice() {
 
 void Application::createLogicalDevice() {
 	FUNCNAME()
+	LOG("1. find queue families")
 	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -332,16 +340,19 @@ void Application::createLogicalDevice() {
 		createInfo.enabledLayerCount = 0;
 	}
 
+	LOG("2. call vkCreateDevice() with VkPhysicalDevice, VkDeviceCreateInfo to create a VkDevice")
 	if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
 		assert(0);
 	}
 
+	LOG("3. call vkGetDeviceQueue() to get a desired queue from a queue families")
 	vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
 	vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
 }
 
 void Application::createSurface() {
 	FUNCNAME()
+	LOG("- call glfwCreateWindowSurface() to create a VkSurfaceKHR")
 	if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
 		assert(0);
 	}
@@ -458,6 +469,7 @@ void Application::createSwapChain() {
 
 void Application::createImageViews() {
 	FUNCNAME()
+	LOG("- create image views (VkImageView) for swap chain images (VkImage)")
 	swapChainImageViews.resize(swapChainImages.size());
 	for (size_t i = 0; i < swapChainImages.size(); ++i) {
 		VkImageViewCreateInfo createInfo{};
@@ -480,8 +492,58 @@ void Application::createImageViews() {
 	}
 }
 
+void Application::createDescriptorSetLayout() {
+	FUNCNAME()
+	VkDescriptorSetLayoutBinding uboLayoutBinding{};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT;
+	uboLayoutBinding.pImmutableSamplers = nullptr;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &uboLayoutBinding;
+
+	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+		assert(0);
+	}
+}
+
+/*
+vkCreateGraphicsPipelines()
+	VkGraphicsPipelineCreateInfo
+		VkPipelineShaderStageCreateInfo
+			VkShaderModule
+				vkCreateShaderModule()
+					VkShaderModuleCreateInfo
+		VkPipelineVertexInputStateCreateInfo
+			VkVertexInputBindingDescription
+			VkVertexInputAttributeDescription
+		VkPipelineInputAssemblyStateCreateInfo
+		VkPipelineViewportStateCreateInfo
+			VkViewport
+			VkRect2D
+		VkPipelineRasterizationStateCreateInfo
+		VkPipelineMultisampleStateCreateInfo
+		VkPipelineDepthStencilStateCreateInfo
+		VkPipelineColorBlendStateCreateInfo
+		VkPipelineDynamicStateCreateInfo
+		VkPipelineLayout
+			VkPipelineLayoutCreateInfo
+		VkRenderPass
+			vkCreateRenderPass()
+				VkRenderPassCreateInfo
+					VkAttachmentDescription
+					VkSubpassDescription
+						VkAttachmentReference
+					VkSubpassDependency
+		VkPipeline
+*/
 void Application::createGraphicsPipeline() {
 	FUNCNAME()
+	LOG("- load shaders")
 	Shader shader(device);
 	shader.loadVertexShader("shader/vert.spv");
 	shader.loadFragmentShader("shader/frag.spv");
@@ -542,6 +604,7 @@ void Application::createGraphicsPipeline() {
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	//rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f;
 	rasterizer.depthBiasClamp = 0.0f;
@@ -579,8 +642,8 @@ void Application::createGraphicsPipeline() {
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0;
-	pipelineLayoutInfo.pSetLayouts = nullptr;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = 0;
 
@@ -690,7 +753,7 @@ void Application::createCommandPool() {
 
 void Application::create3DModels() {
 	FUNCNAME()
-	triangle.initialize(physicalDevice, device, commandPool, graphicsQueue);
+	triangle.initialize(physicalDevice, device, commandPool, graphicsQueue, descriptorSetLayout);
 }
 
 void Application::createCommandBuffers() {
@@ -722,7 +785,7 @@ void Application::createCommandBuffers() {
 		vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 		{
-			triangle.commitCommands(commandBuffers[i]);
+			triangle.commitCommands(commandBuffers[i], pipelineLayout);
 		}
 		vkCmdEndRenderPass(commandBuffers[i]);
 		if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
@@ -744,6 +807,7 @@ void Application::createSemaphores() {
 
 void Application::drawFrame() {
 	// TODO: update logic here
+	triangle.updateUniformBuffer();
 
 	vkQueueWaitIdle(presentQueue);
 

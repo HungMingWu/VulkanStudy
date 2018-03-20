@@ -1,6 +1,9 @@
 #include "mesh.h"
 #include "log.h"
 
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
 static const std::vector<Vertex> vertices = {
 	{ { 0.0f, -0.5f },{ 1.0f, 0.0f, 0.0f } },
 	{ { 0.5f, 0.5f },{ 0.0f, 1.0f, 0.0f } },
@@ -9,6 +12,10 @@ static const std::vector<Vertex> vertices = {
 
 static const std::vector<uint16_t> indices = {
 	0, 1, 2
+};
+
+struct TriangleUBO {
+	glm::mat4 mvp;
 };
 
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -76,9 +83,10 @@ void copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueu
 	vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkCommandPool commandPool, VkQueue graphicsQueue) {
+void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkCommandPool commandPool, VkQueue graphicsQueue, VkDescriptorSetLayout descriptorSetLayout_) {
 	FUNCNAME()
 	device = device_;
+	descriptorSetLayout = descriptorSetLayout_;
 	{
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 		VkBuffer stagingBuffer;
@@ -120,9 +128,75 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
+	{
+		VkDeviceSize bufferSize = sizeof(TriangleUBO);
+		createBuffer(physDevice, device, bufferSize,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			uniformBuffer, uniformBufferMemory);
+	}
+	{
+		VkDescriptorPoolSize poolSize{};
+		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount = 1;
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.maxSets = 1;
+		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+			assert(0);
+		}
+	}
+	{
+		VkDescriptorSetLayout layouts[] = { descriptorSetLayout };
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = layouts;
+		if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+			assert(0);
+		}
+	}
+	{
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = uniformBuffer;
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(TriangleUBO);
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSet;
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
+		descriptorWrite.pImageInfo = nullptr;
+		descriptorWrite.pTexelBufferView = nullptr;
+		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+	}
 }
 
-void Triangle::commitCommands(VkCommandBuffer commandBuffer) {
+void Triangle::updateUniformBuffer() {
+	static float t = 0.0f;
+	t += 0.001f;
+	TriangleUBO ubo{};
+	ubo.mvp = glm::mat4(1.0f);
+	ubo.mvp = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 0.0f, 1.0f));
+	//ubo.mvp = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, -1.0f, 1.0f));
+
+	// Not the most efficient way. Use push constants for more efficiency.
+	void* data;
+	vkMapMemory(device, uniformBufferMemory, 0, sizeof(ubo), 0, &data);
+	memcpy(data, &ubo, sizeof(ubo));
+	vkUnmapMemory(device, uniformBufferMemory);
+}
+
+void Triangle::commitCommands(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout) {
+	FUNCNAME()
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
 	VkBuffer vertexBuffers[] = { vertexBuffer };
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -133,8 +207,11 @@ void Triangle::commitCommands(VkCommandBuffer commandBuffer) {
 
 void Triangle::destroy() {
 	FUNCNAME()
+	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	vkDestroyBuffer(device, vertexBuffer, nullptr);
 	vkFreeMemory(device, vertexBufferMemory, nullptr);
 	vkDestroyBuffer(device, indexBuffer, nullptr);
 	vkFreeMemory(device, indexBufferMemory, nullptr);
+	vkDestroyBuffer(device, uniformBuffer, nullptr);
+	vkFreeMemory(device, uniformBufferMemory, nullptr);
 }

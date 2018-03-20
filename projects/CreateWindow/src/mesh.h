@@ -35,8 +35,9 @@ struct Vertex {
 
 class Triangle {
 public:
-	void initialize(VkPhysicalDevice physDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue);
-	void commitCommands(VkCommandBuffer commandBuffer);
+	void initialize(VkPhysicalDevice physDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkDescriptorSetLayout);
+	void updateUniformBuffer();
+	void commitCommands(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
 	void destroy();
 private:
 	VkDevice device;
@@ -44,4 +45,10 @@ private:
 	VkDeviceMemory vertexBufferMemory;
 	VkBuffer indexBuffer;
 	VkDeviceMemory indexBufferMemory;
+	VkBuffer uniformBuffer;
+	VkDeviceMemory uniformBufferMemory;
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorSet descriptorSet;
+
 };
