@@ -2,6 +2,7 @@
 #include "shader.h"
 #include "mesh.h"
 #include "log.h"
+#include "utils.h"
 #include <cassert>
 #include <vector>
 #include <set>
@@ -78,7 +79,7 @@ void Application::initWindow() {
 	FUNCNAME()
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	window = glfwCreateWindow(640, 480, "Title", nullptr, nullptr);
+	window = glfwCreateWindow(1600, 900, "Title", nullptr, nullptr);
 
 	if (glfwVulkanSupported() != GLFW_TRUE) {
 		assert(0);
@@ -257,19 +258,20 @@ QueueFamilyIndices Application::findQueueFamilies(VkPhysicalDevice physDevice) {
 bool Application::isDeviceSuitable(VkPhysicalDevice physDevice) {
 	FUNCNAME()
 	QueueFamilyIndices indices = findQueueFamilies(physDevice);
-	/*
+	
 	VkPhysicalDeviceProperties deviceProperties;
-	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+	vkGetPhysicalDeviceProperties(physDevice, &deviceProperties);
 	VkPhysicalDeviceFeatures deviceFeatures;
-	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-	*/
+	vkGetPhysicalDeviceFeatures(physDevice, &deviceFeatures);
+	
 	bool extensionsSupported = checkDeviceExtensionSupport(physDevice);
 	bool swapChainAdequate = false;
 	if (extensionsSupported) {
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physDevice);
 		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
 	}
-	return indices.isComplete() && extensionsSupported && swapChainAdequate;
+	return indices.isComplete() && extensionsSupported
+		&& swapChainAdequate && deviceFeatures.samplerAnisotropy;
 }
 
 bool Application::checkDeviceExtensionSupport(VkPhysicalDevice physDevice) {
@@ -325,6 +327,7 @@ void Application::createLogicalDevice() {
 	}
 
 	VkPhysicalDeviceFeatures deviceFeatures{};
+	deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 	VkDeviceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -472,23 +475,8 @@ void Application::createImageViews() {
 	LOG("- create image views (VkImageView) for swap chain images (VkImage)")
 	swapChainImageViews.resize(swapChainImages.size());
 	for (size_t i = 0; i < swapChainImages.size(); ++i) {
-		VkImageViewCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		createInfo.image = swapChainImages[i];
-		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		createInfo.format = swapChainImageFormat;
-		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
-		if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-			assert(0);
-		}
+		swapChainImageViews[i]
+			= createImageView(device, swapChainImages[i], swapChainImageFormat);
 	}
 }
 
@@ -501,10 +489,20 @@ void Application::createDescriptorSetLayout() {
 	uboLayoutBinding.stageFlags = VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT;
 	uboLayoutBinding.pImmutableSamplers = nullptr;
 
+	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+	samplerLayoutBinding.binding = 1;
+	samplerLayoutBinding.descriptorCount = 1;
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.pImmutableSamplers = nullptr;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
+		uboLayoutBinding, samplerLayoutBinding
+	};
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &uboLayoutBinding;
+	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfo.pBindings = bindings.data();
 
 	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 		assert(0);
