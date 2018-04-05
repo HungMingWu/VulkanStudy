@@ -38,29 +38,78 @@ struct Vertex {
 	}
 };
 
-class Triangle {
+class Mesh {
 public:
-	void initialize(VkPhysicalDevice physDevice, VkDevice device, VkCommandPool commandPool, VkQueue graphicsQueue, VkDescriptorSetLayout);
+	void initialize(
+		VkPhysicalDevice physDevice,
+		VkDevice device,
+		VkCommandPool commandPool,
+		VkQueue graphicsQueue,
+		VkExtent2D swapChainExtent,
+		VkRenderPass renderPass);
 	void updateUniformBuffer();
-	void commitCommands(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+	void commitCommands(VkCommandBuffer commandBuffer);
 	void destroy();
+	void recreate(VkExtent2D swapChainExtent, VkRenderPass renderPass);
+	inline VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
+	void createPipeline(VkExtent2D swapChainExtent, VkRenderPass renderPass);
 private:
+	void createBuffers();
+	void createTextureAndSampler();
+	void createDescriptorSet();
 	void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
 	void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+	// association
+	VkPhysicalDevice physDevice;
 	VkDevice device;
 	VkCommandPool commandPool;
 	VkQueue graphicsQueue;
+	// composition
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
 	VkBuffer indexBuffer;
 	VkDeviceMemory indexBufferMemory;
 	VkBuffer uniformBuffer;
 	VkDeviceMemory uniformBufferMemory;
-	VkDescriptorPool descriptorPool;
 	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorPool descriptorPool;
 	VkDescriptorSet descriptorSet;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
 	VkImageView textureImageView;
 	VkSampler textureSampler;
+
+	VkPipelineLayout pipelineLayout;
+	VkPipeline graphicsPipeline;
 };
+
+/*
+vkCreateGraphicsPipelines()
+	VkGraphicsPipelineCreateInfo
+		VkPipelineShaderStageCreateInfo
+			VkShaderModule
+				vkCreateShaderModule()
+					VkShaderModuleCreateInfo
+		VkPipelineVertexInputStateCreateInfo
+			VkVertexInputBindingDescription
+			VkVertexInputAttributeDescription
+		VkPipelineInputAssemblyStateCreateInfo
+		VkPipelineViewportStateCreateInfo
+			VkViewport
+			VkRect2D
+		VkPipelineRasterizationStateCreateInfo
+		VkPipelineMultisampleStateCreateInfo
+		VkPipelineDepthStencilStateCreateInfo
+		VkPipelineColorBlendStateCreateInfo
+		VkPipelineDynamicStateCreateInfo
+		VkPipelineLayout
+			VkPipelineLayoutCreateInfo
+		VkRenderPass
+			vkCreateRenderPass()
+				VkRenderPassCreateInfo
+					VkAttachmentDescription
+					VkSubpassDescription
+						VkAttachmentReference
+					VkSubpassDependency
+		VkPipeline
+*/

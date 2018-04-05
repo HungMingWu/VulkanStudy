@@ -2,11 +2,12 @@
 #include "log.h"
 #include "imageloader.h"
 #include "utils.h"
+#include "shader.h"
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
-/*
+/* triangle
 static const std::vector<Vertex> vertices = {
 	{ { 0.0f, -0.5f },{ 1.0f, 0.0f, 0.0f }, {1.0f, 0.0f} },
 	{ { 0.5f, 0.5f },{ 0.0f, 1.0f, 0.0f }, {0.0f, 0.0f} },
@@ -29,12 +30,45 @@ struct TriangleUBO {
 	glm::mat4 mvp;
 };
 
-void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkCommandPool commandPool_, VkQueue graphicsQueue_, VkDescriptorSetLayout descriptorSetLayout_) {
+void Mesh::destroy() {
 	FUNCNAME()
+	vkDestroySampler(device, textureSampler, nullptr);
+	vkDestroyImageView(device, textureImageView, nullptr);
+	vkDestroyImage(device, textureImage, nullptr);
+	vkFreeMemory(device, textureImageMemory, nullptr);
+	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+	vkDestroyBuffer(device, vertexBuffer, nullptr);
+	vkFreeMemory(device, vertexBufferMemory, nullptr);
+	vkDestroyBuffer(device, indexBuffer, nullptr);
+	vkFreeMemory(device, indexBufferMemory, nullptr);
+	vkDestroyBuffer(device, uniformBuffer, nullptr);
+	vkFreeMemory(device, uniformBufferMemory, nullptr);
+	vkDestroyPipeline(device, graphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+}
+
+void Mesh::recreate(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
+	createPipeline(swapChainExtent, renderPass);
+}
+
+void Mesh::initialize(VkPhysicalDevice physDevice_, VkDevice device_,
+	VkCommandPool commandPool_, VkQueue graphicsQueue_,
+	VkExtent2D swapChainExtent, VkRenderPass renderPass)
+{
+	FUNCNAME()
+	physDevice = physDevice_;
 	device = device_;
 	commandPool = commandPool_;
 	graphicsQueue = graphicsQueue_;
-	descriptorSetLayout = descriptorSetLayout_;
+	createBuffers();
+	createTextureAndSampler();
+	createDescriptorSet();
+	createPipeline(swapChainExtent, renderPass);
+}
+
+void Mesh::createBuffers() {
+	// vertex buffer
 	{
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 		VkBuffer stagingBuffer;
@@ -56,6 +90,7 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
+	// index buffer
 	{
 		VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 		VkBuffer stagingBuffer;
@@ -76,6 +111,7 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
+	// uniform buffer
 	{
 		VkDeviceSize bufferSize = sizeof(TriangleUBO);
 		createBuffer(physDevice, device, bufferSize,
@@ -83,6 +119,9 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			uniformBuffer, uniformBufferMemory);
 	}
+}
+
+void Mesh::createTextureAndSampler() {
 	// load image for texturing
 	{
 		freeimage::ImageData imageData = freeimage::loadImage("../../resources/hob.jpg");
@@ -173,6 +212,11 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 			assert(0);
 		}
 	}
+}
+
+void Mesh::createDescriptorSet() {
+	FUNCNAME()
+	// descriptor pool
 	{
 		std::array<VkDescriptorPoolSize, 2> poolSizes = {};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -189,6 +233,34 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 		}
 	}
 	{
+		VkDescriptorSetLayoutBinding uboLayoutBinding{};
+		uboLayoutBinding.binding = 0;
+		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uboLayoutBinding.descriptorCount = 1;
+		uboLayoutBinding.stageFlags = VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT;
+		uboLayoutBinding.pImmutableSamplers = nullptr;
+
+		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+		samplerLayoutBinding.binding = 1;
+		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.pImmutableSamplers = nullptr;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
+			uboLayoutBinding, samplerLayoutBinding
+		};
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+		layoutInfo.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+			assert(0);
+		}
+	}
+	// descriptor set
+	{
 		VkDescriptorSetLayout layouts[] = { descriptorSetLayout };
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -199,6 +271,7 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 			assert(0);
 		}
 	}
+	// update descriptor set
 	{
 		VkDescriptorBufferInfo bufferInfo{};
 		bufferInfo.buffer = uniformBuffer;
@@ -232,22 +305,7 @@ void Triangle::initialize(VkPhysicalDevice physDevice, VkDevice device_, VkComma
 	}
 }
 
-void Triangle::destroy() {
-	FUNCNAME()
-	vkDestroySampler(device, textureSampler, nullptr);
-	vkDestroyImageView(device, textureImageView, nullptr);
-	vkDestroyImage(device, textureImage, nullptr);
-	vkFreeMemory(device, textureImageMemory, nullptr);
-	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-	vkDestroyBuffer(device, vertexBuffer, nullptr);
-	vkFreeMemory(device, vertexBufferMemory, nullptr);
-	vkDestroyBuffer(device, indexBuffer, nullptr);
-	vkFreeMemory(device, indexBufferMemory, nullptr);
-	vkDestroyBuffer(device, uniformBuffer, nullptr);
-	vkFreeMemory(device, uniformBufferMemory, nullptr);
-}
-
-void Triangle::updateUniformBuffer() {
+void Mesh::updateUniformBuffer() {
 	static float t = 0.0f;
 	t += 0.0001f;
 	TriangleUBO ubo{};
@@ -262,9 +320,11 @@ void Triangle::updateUniformBuffer() {
 	vkUnmapMemory(device, uniformBufferMemory);
 }
 
-void Triangle::commitCommands(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout) {
+void Mesh::commitCommands(VkCommandBuffer commandBuffer) {
 	FUNCNAME()
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+		pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
 	VkBuffer vertexBuffers[] = { vertexBuffer };
 	VkDeviceSize offsets[] = { 0 };
@@ -274,7 +334,7 @@ void Triangle::commitCommands(VkCommandBuffer commandBuffer, VkPipelineLayout pi
 	vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 }
 
-void Triangle::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+void Mesh::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
 	FUNCNAME()
 	static_cast<void>(format);
 
@@ -322,7 +382,7 @@ void Triangle::transitionImageLayout(VkImage image, VkFormat format, VkImageLayo
 	endSingleTimeCommands(device, commandPool, graphicsQueue, commandBuffer);
 }
 
-void Triangle::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
+void Mesh::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
 	FUNCNAME()
 
 	VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
@@ -354,4 +414,138 @@ void Triangle::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width,
 	);
 
 	endSingleTimeCommands(device, commandPool, graphicsQueue, commandBuffer);
+}
+
+void Mesh::createPipeline(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
+	FUNCNAME()
+	LOG("- load shaders")
+	Shader shader(device);
+	shader.loadVertexShader("shader/vert.spv");
+	shader.loadFragmentShader("shader/frag.spv");
+
+	VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
+	vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertexShaderStageInfo.module = shader.getVertexShaderModule();
+	vertexShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo fragmentShaderStageInfo{};
+	fragmentShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragmentShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragmentShaderStageInfo.module = shader.getFragmentShaderModule();
+	fragmentShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShaderStageInfo, fragmentShaderStageInfo };
+
+	auto bindingDescription = Vertex::getBindingDescription();
+	auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 1;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+	vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+	VkViewport viewport{};
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = static_cast<float>(swapChainExtent.width);
+	viewport.height = static_cast<float>(swapChainExtent.height);
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	VkRect2D scissor{};
+	scissor.offset = { 0, 0 };
+	scissor.extent = swapChainExtent;
+
+	VkPipelineViewportStateCreateInfo viewportState{};
+	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.viewportCount = 1;
+	viewportState.pViewports = &viewport;
+	viewportState.scissorCount = 1;
+	viewportState.pScissors = &scissor;
+
+	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.lineWidth = 1.0f;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	//rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasConstantFactor = 0.0f;
+	rasterizer.depthBiasClamp = 0.0f;
+	rasterizer.depthBiasSlopeFactor = 0.0f;
+
+	VkPipelineMultisampleStateCreateInfo multisampling{};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.minSampleShading = 1.0f;
+	multisampling.pSampleMask = nullptr;
+	multisampling.alphaToCoverageEnable = VK_FALSE;
+	multisampling.alphaToOneEnable = VK_FALSE;
+
+	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.logicOp = VK_LOGIC_OP_COPY;
+	colorBlending.attachmentCount = 1;
+	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.blendConstants[0] = 0.0f;
+	colorBlending.blendConstants[1] = 0.0f;
+	colorBlending.blendConstants[2] = 0.0f;
+	colorBlending.blendConstants[3] = 0.0f;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = 0;
+
+	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+		assert(0);
+	}
+
+	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineInfo.stageCount = 2;
+	pipelineInfo.pStages = shaderStages;
+	pipelineInfo.pVertexInputState = &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState = &inputAssembly;
+	pipelineInfo.pViewportState = &viewportState;
+	pipelineInfo.pRasterizationState = &rasterizer;
+	pipelineInfo.pMultisampleState = &multisampling;
+	pipelineInfo.pDepthStencilState = nullptr;
+	pipelineInfo.pColorBlendState = &colorBlending;
+	pipelineInfo.pDynamicState = nullptr;
+	pipelineInfo.layout = pipelineLayout;
+	assert(renderPass != VK_NULL_HANDLE);
+	pipelineInfo.renderPass = renderPass;
+	pipelineInfo.subpass = 0;
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = -1;
+
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+		assert(0);
+	}
 }

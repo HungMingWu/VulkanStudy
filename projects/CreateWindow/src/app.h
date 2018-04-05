@@ -55,18 +55,13 @@ private:
 	void createSwapChain();
 	void createImageViews();
 	void createRenderPass();
-	void createDescriptorSetLayout();
-	void createGraphicsPipeline();
 	void createFramebuffers();
 	void createCommandPool();
-	void create3DModels();
+	void create3DModels(bool isRecreate = false);
 	void createCommandBuffers();
 	void createSemaphores();
 	void cleanupSwapChain();
 	void recreateSwapChain();
-
-private:
-	//uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 private:
 	GLFWwindow* window = nullptr;
@@ -82,10 +77,7 @@ private:
 	VkFormat swapChainImageFormat;
 	VkExtent2D swapChainExtent;
 	std::vector<VkImageView> swapChainImageViews;
-	VkDescriptorSetLayout descriptorSetLayout;
-	VkPipelineLayout pipelineLayout;
 	VkRenderPass renderPass;
-	VkPipeline graphicsPipeline;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 
 	VkCommandPool commandPool;
@@ -94,7 +86,7 @@ private:
 	VkSemaphore renderFinishedSemaphore;
 
 	// 3d models
-	Triangle triangle;
+	Mesh triangle;
 
 #ifdef _DEBUG
 	const bool enableValidationLayers = true;
