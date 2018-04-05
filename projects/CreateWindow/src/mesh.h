@@ -4,13 +4,16 @@
 // glm uses nameless structs and unions
 #pragma warning(disable : 4201)
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
 #include "vulkan/vulkan.h"
 #include <vector>
 #include <array>
 
 struct Vertex {
-	glm::vec2 pos;
+	glm::vec3 pos;
 	glm::vec3 color;
 	glm::vec2 texcoord;
 	static VkVertexInputBindingDescription getBindingDescription() {
@@ -24,7 +27,7 @@ struct Vertex {
 		std::array<VkVertexInputAttributeDescription, 3> desc;
 		desc[0].binding = 0;
 		desc[0].location = 0;
-		desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+		desc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 		desc[0].offset = offsetof(Vertex, pos);
 		desc[1].binding = 0;
 		desc[1].location = 1;
@@ -47,7 +50,7 @@ public:
 		VkQueue graphicsQueue,
 		VkExtent2D swapChainExtent,
 		VkRenderPass renderPass);
-	void updateUniformBuffer();
+	void updateUniformBuffer(VkExtent2D swapChainExtent);
 	void commitCommands(VkCommandBuffer commandBuffer);
 	void destroy();
 	void recreate(VkExtent2D swapChainExtent, VkRenderPass renderPass);
@@ -72,7 +75,6 @@ private:
 	VkBuffer uniformBuffer;
 	VkDeviceMemory uniformBufferMemory;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkDescriptorPool descriptorPool;
 	VkDescriptorSet descriptorSet;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
@@ -81,6 +83,9 @@ private:
 
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
+
+	// maybe should not be here?
+	VkDescriptorPool descriptorPool;
 };
 
 /*

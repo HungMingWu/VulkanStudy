@@ -62,6 +62,7 @@ private:
 	void createSemaphores();
 	void cleanupSwapChain();
 	void recreateSwapChain();
+	void createDepthResources();
 
 private:
 	GLFWwindow* window = nullptr;
@@ -79,6 +80,11 @@ private:
 	std::vector<VkImageView> swapChainImageViews;
 	VkRenderPass renderPass;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
+
+	// depth buffer
+	VkImage depthImage;
+	VkDeviceMemory depthImageMemory;
+	VkImageView depthImageView;
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;

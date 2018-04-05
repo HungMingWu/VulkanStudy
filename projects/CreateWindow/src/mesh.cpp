@@ -4,9 +4,6 @@
 #include "utils.h"
 #include "shader.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-
 /* triangle
 static const std::vector<Vertex> vertices = {
 	{ { 0.0f, -0.5f },{ 1.0f, 0.0f, 0.0f }, {1.0f, 0.0f} },
@@ -16,14 +13,21 @@ static const std::vector<Vertex> vertices = {
 */
 
 static const std::vector<Vertex> vertices = {
-	{ { -0.5f, -0.5f },{ 1.0f, 0.0f, 0.0f },{ 1.0f, 0.0f } },
-	{ { 0.5f, -0.5f },{ 0.0f, 1.0f, 0.0f },{ 0.0f, 0.0f } },
-	{ { 0.5f, 0.5f },{ 0.0f, 0.0f, 1.0f },{ 0.0f, 1.0f } },
-	{ { -0.5f, 0.5f },{ 1.0f, 1.0f, 1.0f },{ 1.0f, 1.0f } }
+	{ { -0.5f, -0.5f, 0.0f },{ 1.0f, 0.0f, 0.0f },{ 0.0f, 0.0f } },
+	{ { 0.5f, -0.5f, 0.0f },{ 0.0f, 1.0f, 0.0f },{ 1.0f, 0.0f } },
+	{ { 0.5f, 0.5f, 0.0f },{ 0.0f, 0.0f, 1.0f },{ 1.0f, 1.0f } },
+	{ { -0.5f, 0.5f, 0.0f },{ 1.0f, 1.0f, 1.0f },{ 0.0f, 1.0f } },
+	
+	{ { -0.5f, -0.5f, -0.2f },{ 1.0f, 0.0f, 0.0f },{ 0.0f, 0.0f } },
+	{ { 0.5f, -0.5f, -0.2f },{ 0.0f, 1.0f, 0.0f },{ 1.0f, 0.0f } },
+	{ { 0.5f, 0.5f, -0.2f },{ 0.0f, 0.0f, 1.0f },{ 1.0f, 1.0f } },
+	{ { -0.5f, 0.5f, -0.2f },{ 1.0f, 1.0f, 1.0f },{ 0.0f, 1.0f } }
+	
 };
 
 static const std::vector<uint16_t> indices = {
-	0, 1, 2, 0, 2, 3
+	0, 2, 1, 0, 3, 2,
+	4, 6, 5, 4, 7, 6
 };
 
 struct TriangleUBO {
@@ -44,8 +48,8 @@ void Mesh::destroy() {
 	vkFreeMemory(device, indexBufferMemory, nullptr);
 	vkDestroyBuffer(device, uniformBuffer, nullptr);
 	vkFreeMemory(device, uniformBufferMemory, nullptr);
-	vkDestroyPipeline(device, graphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+	vkDestroyPipeline(device, graphicsPipeline, nullptr);
 }
 
 void Mesh::recreate(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
@@ -188,7 +192,8 @@ void Mesh::createTextureAndSampler() {
 		imageData.unload();
 	}
 	{
-		textureImageView = createImageView(device, textureImage, VK_FORMAT_B8G8R8A8_UNORM);
+		textureImageView = createImageView(device, textureImage, VK_FORMAT_B8G8R8A8_UNORM,
+			VK_IMAGE_ASPECT_COLOR_BIT);
 	}
 	{
 		VkSamplerCreateInfo samplerInfo{};
@@ -216,7 +221,7 @@ void Mesh::createTextureAndSampler() {
 
 void Mesh::createDescriptorSet() {
 	FUNCNAME()
-	// descriptor pool
+		// descriptor pool
 	{
 		std::array<VkDescriptorPoolSize, 2> poolSizes = {};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -305,13 +310,21 @@ void Mesh::createDescriptorSet() {
 	}
 }
 
-void Mesh::updateUniformBuffer() {
+void Mesh::updateUniformBuffer(VkExtent2D swapChainExtent) {
+	// TODO: move to camera (view/proj)
+	const float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
+	glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 1000.0f);
+	proj[1][1] *= -1.0f;
+
+	//glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f));
+	
 	static float t = 0.0f;
 	t += 0.0001f;
+	glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 0.3f, 0.1f));
+
 	TriangleUBO ubo{};
-	ubo.mvp = glm::mat4(1.0f);
-	ubo.mvp = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 0.0f, 1.0f));
-	//ubo.mvp = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, -1.0f, 1.0f));
+	ubo.mvp = proj * view * model;
 
 	// Not the most efficient way. Use push constants for more efficiency.
 	void* data;
@@ -478,6 +491,7 @@ void Mesh::createPipeline(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	//rasterizer.cullMode = VK_CULL_MODE_NONE;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	//rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
@@ -526,6 +540,18 @@ void Mesh::createPipeline(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
 		assert(0);
 	}
 
+	VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencil.depthTestEnable = VK_TRUE;
+	depthStencil.depthWriteEnable = VK_TRUE;
+	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthStencil.depthBoundsTestEnable = VK_FALSE;
+	depthStencil.minDepthBounds = 0.0f; // Optional
+	depthStencil.maxDepthBounds = 1.0f; // Optional
+	depthStencil.stencilTestEnable = VK_FALSE;
+	depthStencil.front = {}; // Optional
+	depthStencil.back = {}; // Optional
+
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pipelineInfo.stageCount = 2;
@@ -535,7 +561,7 @@ void Mesh::createPipeline(VkExtent2D swapChainExtent, VkRenderPass renderPass) {
 	pipelineInfo.pViewportState = &viewportState;
 	pipelineInfo.pRasterizationState = &rasterizer;
 	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = nullptr;
+	pipelineInfo.pDepthStencilState = &depthStencil;
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = nullptr;
 	pipelineInfo.layout = pipelineLayout;
