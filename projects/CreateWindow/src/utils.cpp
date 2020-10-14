@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "log.h"
+#include <stdexcept>
 
 VkImageView createImageView(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
 	VkImageViewCreateInfo viewInfo{};
