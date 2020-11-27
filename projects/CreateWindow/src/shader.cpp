@@ -14,10 +14,12 @@ static std::vector<char> readFile(const std::string& filename) {
 }
 
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
-	VkShaderModuleCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.codeSize = code.size();
-	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+	VkShaderModuleCreateInfo createInfo {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = code.size(),
+		.pCode = reinterpret_cast<const uint32_t*>(code.data())
+	};
+
 	VkShaderModule shaderModule;
 	if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
 		assert(0);
